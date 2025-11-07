@@ -1,3 +1,4 @@
+#rag-chat 
 import os
 from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
@@ -98,7 +99,7 @@ def ask_llm(query: str, context_text: str, history_msgs: list):
     system_prompt = (
         "You are a helpful assistant that answers ONLY using the provided context.\n"
         "If the answer is not present in the context, reply: 'I can’t find this in the uploaded PDF.'\n"
-        "Always list the sources from the context under a 'Sources' section."
+        "Do not include source links, citations, or document references in the responses."
     )
     messages = [{"role": "system", "content": system_prompt}] + history_msgs + [
         {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion:\n{query}"}

@@ -1,7 +1,12 @@
+# app-ui.py
 import streamlit as st
 import asyncio
 import os, sys
-
+import time
+import base64
+from urllib.parse import urlparse
+ 
+ 
 # Make src importable
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if SRC_DIR not in sys.path:
@@ -12,7 +17,7 @@ import requests
  
  
 # Page config
-st.set_page_config(page_title="AI Agent Chatbot", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="AI Chatbot", page_icon="🤖", layout="centered")
  
 # Initialize session state
 if "orchestrator" not in st.session_state:
@@ -37,88 +42,121 @@ if "active_chat_id" not in st.session_state:
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
    
-    st.title("Upload PDF and Trigger Indexer")
+    # Clear Chat Section
+    st.markdown("### 💬 Chat Management")
+    if st.button("🗑️ Clear Current Chat", use_container_width=True, type="secondary"):
+        # Clear the current chat history
+        st.session_state["history"] = []
+        st.session_state["conversations"][st.session_state["active_chat_id"]] = []
+        st.success("✅ Chat cleared!")
+        time.sleep(1)
+        st.rerun()
+   
+    st.markdown("---")
  
+    # Upload Section
+    st.markdown("### 📄 Upload your data")
     uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
  
     if uploaded_file is not None:
-        if st.button("Upload and Trigger Indexer"):
+        if st.button("📤 Upload and Index", use_container_width=True):
             files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
             try:
+                # Create a placeholder for the loading animation
+                loading_placeholder = st.empty()
+               
+                with loading_placeholder.container():
+                    st.info("⏳ Step 1/2: Uploading file...")
+                    progress_bar = st.progress(0)
+                   
                 response = requests.post("http://localhost:8000/upload/", files=files)
+               
                 if response.status_code == 200:
-                    st.success("✅ File uploaded and indexer triggered!")
+                    with loading_placeholder.container():
+                        st.info("⚙️ Step 2/2: Indexing document (this takes ~35 seconds)...")
+                        progress_bar = st.progress(0)
+                       
+                        # Simulate progress over 35 seconds
+                        for percent in range(0, 101, 5):
+                            time.sleep(1.75)  # 35 seconds / 20 steps = 1.75 seconds per step
+                            progress_bar.progress(percent)
+                   
+                    loading_placeholder.empty()
+                    st.success("✅ File uploaded and indexed successfully!")
+                    time.sleep(2)  # Show success message briefly
+                    st.rerun()  # Refresh the page
                 else:
+                    loading_placeholder.empty()
                     st.error(f"❌ Error: {response.text}")
             except Exception as e:
                 st.error(f"❌ Connection error: {str(e)}")
- 
- 
+   
     st.markdown("---")
-    st.markdown("### 💬 Conversations")
- 
-    chat_ids = list(st.session_state["conversations"].keys())
-    titles = [st.session_state["chat_titles"].get(cid, "Untitled") for cid in chat_ids]
- 
-    if chat_ids:
+   
+    # Cleanup Section
+    st.markdown("### ☠️ Clean your data!!! ")
+    st.caption("Remove all uploaded PDFs for data privacy")
+   
+    if st.button("🧹 Reset & Cleanup Index", use_container_width=True, type="secondary"):
         try:
-            current_index = chat_ids.index(st.session_state["active_chat_id"])
-        except ValueError:
-            current_index = 0
- 
-        selected_title = st.radio("Switch conversation", titles, index=current_index, label_visibility="collapsed")
-        sel_idx = titles.index(selected_title)
-        st.session_state["active_chat_id"] = chat_ids[sel_idx]
-        st.session_state["history"] = st.session_state["conversations"][st.session_state["active_chat_id"]]
-    else:
-        st.info("No conversations yet")
- 
-    if st.button("＋ New chat", type="primary", use_container_width=True, key="new_chat_sidebar"):
-        n = st.session_state["next_chat_num"]
-        cid = f"chat-{n}"
-        st.session_state["next_chat_num"] += 1
-        st.session_state["conversations"][cid] = []
-        st.session_state["chat_titles"][cid] = f"New chat {n}"
-        st.session_state["active_chat_id"] = cid
-        st.session_state["history"] = st.session_state["conversations"][cid]
-        st.rerun()
- 
-    st.write("")
- 
-    if st.button("🗑️ Delete current chat", use_container_width=True, key="delete_chat_sidebar"):
-        cid = st.session_state.get("active_chat_id")
-        if cid:
-            st.session_state["conversations"].pop(cid, None)
-            st.session_state["chat_titles"].pop(cid, None)
-            remaining = list(st.session_state["conversations"].keys())
-            if remaining:
-                st.session_state["active_chat_id"] = remaining[0]
+            # Create a placeholder for the loading animation
+            loading_placeholder = st.empty()
+           
+            with loading_placeholder.container():
+                st.warning("⏳ Step 1/2: Deleting files and clearing index...")
+                progress_bar = st.progress(0)
+               
+            response = requests.post("http://localhost:8000/reset-index-and-cleanup")
+           
+            if response.status_code == 200:
+                result = response.json()
+                summary = result.get("summary", {})
+               
+                with loading_placeholder.container():
+                    st.info("⚙️ Step 2/2: Rebuilding index (this takes ~35 seconds)...")
+                    progress_bar = st.progress(0)
+                   
+                    # Simulate progress over 35 seconds
+                    for percent in range(0, 101, 5):
+                        time.sleep(1.75)  # 35 seconds / 20 steps = 1.75 seconds per step
+                        progress_bar.progress(percent)
+               
+                loading_placeholder.empty()
+                st.success("✅ Cleanup completed successfully!")
+               
+                # Show detailed results
+                with st.expander("📊 Cleanup Details", expanded=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Blobs Deleted", summary.get("blobs_deleted", 0))
+                        st.metric("Index Docs Cleared", summary.get("index_cleared", 0))
+                    with col2:
+                        st.metric("Blobs Kept", summary.get("blobs_kept", 0))
+                        st.metric("Indexer Triggered", "✅" if summary.get("indexer_triggered") else "❌")
+                   
+                    # Show deleted files
+                    blob_cleanup = result.get("results", {}).get("blob_cleanup", {})
+                    deleted_files = blob_cleanup.get("deleted_files", [])
+                    if deleted_files:
+                        st.markdown("**Deleted Files:**")
+                        for f in deleted_files:
+                            st.text(f"• {f}")
+               
+                time.sleep(2)  # Show success message briefly
+                st.rerun()  # Refresh the page
             else:
-                new_cid = f"chat-{st.session_state['next_chat_num']}"
-                st.session_state["next_chat_num"] += 1
-                st.session_state["conversations"][new_cid] = []
-                st.session_state["chat_titles"][new_cid] = f"New chat {st.session_state['next_chat_num']}"
-                st.session_state["active_chat_id"] = new_cid
-            st.session_state["history"] = st.session_state["conversations"][st.session_state["active_chat_id"]]
-        st.rerun()
- 
-    # st.markdown("---")
-    # st.markdown("### ℹ️ About")
-    # st.markdown("""
-    # **AI Agent with Tools:**
-    # - 🔍 Document Search (RAG)
-    # - 🏥 Healthcare Database (MCP)
-    # - 💭 Natural Conversation
-    
-    # The agent decides which tools to use based on your query.
-    # """)
-
+                loading_placeholder.empty()
+                st.error(f"❌ Error: {response.text}")
+        except Exception as e:
+            st.error(f"❌ Connection error: {str(e)}")
+             
 # ---------------- MAIN UI ----------------
 cols = st.columns([1, 5, 1])
 with cols[1]:
     st.markdown("""
         <div style="text-align:center;">
-            <h1 style="margin-bottom:0;">🤖 AI Agent Chatbot</h1>
+            <h1 style="margin-bottom:0;">🤖 AI Chatbot</h1>
+            <p style="color:#6b7280;margin-top:4px;">Ask me about documents, healthcare data, or just chat!</p>
         </div>
     """, unsafe_allow_html=True)
  
@@ -146,6 +184,7 @@ if prompt:
             )
  
         # Render assistant answer
+        # import pdb; pdb.set_trace()
         answer = result.answer
         with st.chat_message("assistant"):
             st.markdown(answer)
@@ -156,8 +195,28 @@ if prompt:
         sources = result.sources
         debug = result.debug
         latency_ms = result.latency_ms
-        
+        if len(sources) > 0:
+            encoded_source = sources[0].get('source')
+ 
+ 
+            if len(encoded_source) % 4 == 1:
+                encoded_source = encoded_source[:-1]
+ 
+            # Add padding if needed
+            missing_padding = len(encoded_source) % 4
+            if missing_padding:
+                encoded_source += '=' * (4 - missing_padding)
+ 
+            # Decode and extract file name
+            decoded_url = base64.b64decode(encoded_source).decode('utf-8')
+            file_name = os.path.basename(urlparse(decoded_url).path)
+ 
+            print("File name:", file_name)
+ 
+       
         # Create metrics row
+   
+                # Create metrics row with better source display
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("⚡ Latency", f"{latency_ms}ms")
@@ -168,10 +227,12 @@ if prompt:
                 st.metric("💭 Response Type", "Direct")
         with col3:
             if sources:
-                st.metric("📚 Sources", len(sources))
+                st.metric("📚 Sources", file_name)
+                # Use caption for the filename - it's smaller and wraps nicely
+                # st.caption(f"📄 {file_name}")
             else:
                 st.metric("📚 Sources", "0")
-        
+       
         # Show tools used
         if tools_used:
             with st.expander(f"🔧 Tools Used: {', '.join(tools_used)}", expanded=False):
@@ -182,12 +243,12 @@ if prompt:
                     else:
                         st.markdown(f"**🏥 Healthcare Tool: `{tool}`**")
                         st.caption("Queried healthcare database")
-        
+       
         # Show RAG sources if available
         if sources:
             with st.expander(f"🔎 Retrieved Document Context ({len(sources)} chunks)", expanded=False):
                 for i, chunk in enumerate(sources, 1):
-                    st.markdown(f"**Chunk {i}** — *{chunk.get('source', 'Unknown Source')}*")
+                    st.markdown(f"**Chunk {file_name}** — *{chunk.get('source', 'Unknown Source')}*")
                     with st.container():
                         st.text_area(
                             f"Content {i}",
@@ -197,33 +258,34 @@ if prompt:
                             label_visibility="collapsed"
                         )
                     st.markdown("---")
-        
+       
         # Show MCP operations if available
         if debug.get("mcp_operations"):
             with st.expander("🏥 Healthcare Database Operations", expanded=False):
                 mcp_ops = debug["mcp_operations"]
                 st.markdown(f"**Total Operations:** {len(mcp_ops)}")
                 for i, op in enumerate(mcp_ops, 1):
-                    st.markdown(f"### Operation {i}: `{op['tool']}`")
-                    
+                    tool_name = op.get('tool', op.get('name', 'Unknown Tool'))
+                    st.markdown(f"### Operation {i}: `{tool_name}`")
+                   
                     col_a, col_b = st.columns(2)
                     with col_a:
                         st.markdown("**Arguments:**")
-                        st.json(op.get("args", {}))
+                        st.json(op.get("args", op.get("arguments", {})))
                     with col_b:
                         st.markdown("**Result:**")
                         st.json(op.get("result", {}))
-                    
+                   
                     if i < len(mcp_ops):
                         st.markdown("---")
-        
+       
         # Show debug info if there are errors
         if debug.get("error"):
             with st.expander("⚠️ Debug Information", expanded=True):
                 st.error(debug["error"])
                 if debug.get("traceback"):
                     st.code(debug["traceback"], language="text")
-        
+       
         # Show all debug info in collapsed expander
         if debug and not debug.get("error"):
             with st.expander("🔍 Debug Information", expanded=False):
