@@ -1,0 +1,317 @@
+# login.py
+import streamlit as st
+import hashlib
+import json
+import os
+from datetime import datetime, timedelta
+import time
+
+# Page config
+st.set_page_config(
+    page_title="AI Chatbot - Login", 
+    page_icon="🔐", 
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# File to store user credentials
+USERS_FILE = "users.json" #fix 
+
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users() -> dict:
+    """Load users from JSON file"""
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_users(users: dict):
+    """Save users to JSON file"""
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
+
+def register_user(username: str, email: str, password: str) -> tuple[bool, str]:
+    """Register a new user"""
+    users = load_users()
+    
+    # Check if username already exists
+    if username in users:
+        return False, "Username already exists!"
+    
+    # Check if email already exists
+    for user_data in users.values():
+        if user_data.get('email') == email:
+            return False, "Email already registered!"
+    
+    # Register new user
+    users[username] = {
+        'email': email,
+        'password': hash_password(password),
+        'created_at': datetime.now().isoformat(),
+        'last_login': None
+    }
+    
+    save_users(users)
+    return True, "Registration successful!"
+
+def authenticate_user(username: str, password: str) -> tuple[bool, str]:
+    """Authenticate user login"""
+    users = load_users()
+    
+    if username not in users:
+        return False, "Username not found!"
+    
+    if users[username]['password'] != hash_password(password):
+        return False, "Incorrect password!"
+    
+    # Update last login
+    users[username]['last_login'] = datetime.now().isoformat()
+    save_users(users)
+    
+    return True, "Login successful!"
+
+def validate_email(email: str) -> bool:
+    """Basic email validation"""
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validate_password(password: str) -> tuple[bool, str]:
+    """Validate password strength"""
+    if len(password) < 6:
+        return False, "Password must be at least 6 characters long"
+    
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one number"
+    
+    if not any(c.isalpha() for c in password):
+        return False, "Password must contain at least one letter"
+    
+    return True, "Password is strong"
+
+# Initialize session state
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'username' not in st.session_state:
+    st.session_state.username = ""
+if 'show_register' not in st.session_state:
+    st.session_state.show_register = False
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        text-align: center;
+        padding: 2rem 0;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        margin: -1rem -1rem 2rem -1rem;
+        border-radius: 0 0 20px 20px;
+    }
+    
+    .login-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        max-width: 400px;
+        margin: 0 auto;
+    }
+    
+    .stButton > button {
+        width: 100%;
+        border-radius: 25px;
+        height: 3rem;
+        font-weight: bold;
+        margin: 0.5rem 0;
+    }
+    
+    .stTextInput > div > div > input {
+        border-radius: 10px;
+        border: 2px solid #e1e5e9;
+        padding: 0.75rem;
+    }
+    
+    .switch-form {
+        text-align: center;
+        margin-top: 1rem;
+        color: #666;
+    }
+    
+    .switch-form a {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    
+    .switch-form a:hover {
+        text-decoration: underline;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Main app
+def main():
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>🤖 AI Chatbot</h1>
+        <p>Secure Access to Your AI Assistant</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Check if user is already authenticated
+    if st.session_state.authenticated:
+        st.success(f"✅ Welcome back, {st.session_state.username}!")
+        st.info("🚀 Redirecting to main application...")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🔓 Continue to Chat", type="primary"):
+                # Redirect to main app
+                st.switch_page("app-ui.py")
+            
+            if st.button("🚪 Logout", type="secondary"):
+                st.session_state.authenticated = False
+                st.session_state.username = ""
+                st.rerun()
+        
+        return
+    
+    # Login/Register Form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        
+        if not st.session_state.show_register:
+            # LOGIN FORM
+            st.markdown("### 🔐 Login")
+            st.markdown("---")
+            
+            with st.form("login_form"):
+                username = st.text_input("👤 Username", placeholder="Enter your username")
+                password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
+                
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    login_button = st.form_submit_button("🚀 Login", type="primary")
+                with col_b:
+                    forgot_button = st.form_submit_button("❓ Demo Login")
+                
+                if login_button:
+                    if username and password:
+                        success, message = authenticate_user(username, password)
+                        
+                        if success:
+                            st.session_state.authenticated = True
+                            st.session_state.username = username
+                            st.success(message)
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(message)
+                    else:
+                        st.warning("⚠️ Please fill in all fields!")
+                
+                if forgot_button:
+                    # Demo login for testing
+                    st.session_state.authenticated = True
+                    st.session_state.username = "demo_user"
+                    st.success("✅ Demo login successful!")
+                    time.sleep(1)
+                    st.rerun()
+            
+            # Switch to register
+            st.markdown("""
+            <div class="switch-form">
+                Don't have an account? 
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("📝 Create New Account", type="secondary"):
+                st.session_state.show_register = True
+                st.rerun()
+        
+        else:
+            # REGISTER FORM
+            st.markdown("### 📝 Create Account")
+            st.markdown("---")
+            
+            with st.form("register_form"):
+                new_username = st.text_input("👤 Choose Username", placeholder="Enter desired username")
+                new_email = st.text_input("📧 Email", placeholder="Enter your email address")
+                new_password = st.text_input("🔒 Password", type="password", placeholder="Create a password")
+                confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password")
+                
+                # Terms and conditions
+                agree_terms = st.checkbox("I agree to the Terms and Conditions")
+                
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    register_button = st.form_submit_button("✅ Register", type="primary")
+                with col_b:
+                    cancel_button = st.form_submit_button("❌ Cancel")
+                
+                if register_button:
+                    if new_username and new_email and new_password and confirm_password:
+                        if not agree_terms:
+                            st.warning("⚠️ Please agree to the Terms and Conditions!")
+                        elif new_password != confirm_password:
+                            st.error("❌ Passwords don't match!")
+                        elif not validate_email(new_email):
+                            st.error("❌ Please enter a valid email address!")
+                        else:
+                            # Validate password
+                            is_valid, password_msg = validate_password(new_password)
+                            if not is_valid:
+                                st.error(f"❌ {password_msg}")
+                            else:
+                                success, message = register_user(new_username, new_email, new_password)
+                                
+                                if success:
+                                    st.success(message)
+                                    st.info("🔄 Please login with your new credentials")
+                                    time.sleep(2)
+                                    st.session_state.show_register = False
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                    else:
+                        st.warning("⚠️ Please fill in all fields!")
+                
+                if cancel_button:
+                    st.session_state.show_register = False
+                    st.rerun()
+            
+            # Switch back to login
+            st.markdown("""
+            <div class="switch-form">
+                Already have an account?
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("🔐 Back to Login", type="secondary"):
+                st.session_state.show_register = False
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666; padding: 1rem;">
+        <p>🔒 Your data is secure and encrypted</p>
+        <p><small>AI Chatbot v2.0 • Powered by Azure OpenAI</small></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
