@@ -233,7 +233,7 @@ def main():
                     cancel_button = st.form_submit_button("❌ Cancel")
                 
                 if register_button:
-                    if new_username and new_email and new_password and confirm_password and role:
+                    if new_username and new_email and new_password and confirm_password:
                         if not agree_terms:
                             st.warning("⚠️ Please agree to the Terms and Conditions!")
                         elif new_password != confirm_password:
@@ -246,7 +246,7 @@ def main():
                             if not is_valid:
                                 st.error(f"❌ {password_msg}")
                             else:
-                                success, message = register_user(new_username, new_email, new_password,role)
+                                success, message = register_user(new_username, new_email, new_password)
                                 
                                 if success:
                                     st.success(message)
