@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Enum
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Enum, Date
 from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship
 from sqlalchemy.exc import OperationalError
 from pydantic import BaseModel, ConfigDict, EmailStr
@@ -9,6 +9,7 @@ import uvicorn
 import enum
 from passlib.hash import pbkdf2_sha256
 from dotenv import load_dotenv
+from datetime import date
 
 load_dotenv()
 
@@ -105,14 +106,20 @@ class Study(Base):
 #     admin = "admin"
 #     user = "user"
 
-class User(Base):
-    __tablename__ = "user_info"
+class Employee(Base):
+    __tablename__ = "employees"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), nullable=False, unique=True)
     password = Column(String(255), nullable=False)  # Store hashed password
     email = Column(String(100), nullable=False, unique=True)
     # role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.user)
+    role = Column(String(100), nullable=True, unique=False)
+    doj = Column(Date, nullable=False)  # Date of Joining
+    designation = Column(String(100), nullable=False)
+    department = Column(String(100), nullable=False)
+    location = Column(String(100), nullable=False)
+
 
     # def __repr__(self):
     #     return f"<Login(username={self.username}, email={self.email}, role={self.role})>"
@@ -168,12 +175,17 @@ class StudySchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserSchema(BaseModel):
+class EmployeeSchema(BaseModel):
     id: int
     username: str
     password: str  # This will hold hashed password, not plain text
     email: EmailStr
-    # role: str  # "admin" or "user"
+    role: str  # "admin" or "user"
+    doj: date  # Date of Joining
+    designation: str
+    department: str
+    location: str
+
 
     # Enable ORM mode for SQLAlchemy compatibility
     model_config = ConfigDict(from_attributes=True)
@@ -235,38 +247,62 @@ def get_studies_for_doctor(doctor_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/register")
-def register_user(username: str, email: str, password: str, db: Session = Depends(get_db)):
+def register_user(username: str, email: str, password: str, doj:str, designation: str, department: str, location: str, db: Session = Depends(get_db)):
     # Check if username or email exists
-    if db.query(User).filter_by(username=username).first():
+    if db.query(Employee).filter_by(username=username).first():
         raise HTTPException(status_code=400, detail="Username already exists")
-    if db.query(User).filter_by(email=email).first():
+    if db.query(Employee).filter_by(email=email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Create new user
     hashed_password = pbkdf2_sha256.hash(password)
-    new_user = User(username=username, email=email, password=hashed_password)
-    db.add(new_user)
+    new_employee = Employee(username=username, email=email, password=hashed_password, doj=doj, designation=designation, department=department, location=location)
+    db.add(new_employee)
     db.commit()
-    db.refresh(new_user)
-    return {"message": "Registration successful", "user_id": new_user.id}
+    db.refresh(new_employee)
+    return {"message": "Registration successful", "user_id": new_employee.id}
+
+# @app.post("/register")
+# def register_user(data: EmployeeSchema, db: Session = Depends(get_db)):
+#     # Hash password
+#     hashed_password = pbkdf2_sha256.hash(data.password)
+
+#     # Create new employee
+#     new_employee = Employee(
+#         username=data.username,
+#         email=data.email,
+#         password=hashed_password,
+#         role="user",  # default role
+#         doj=data.doj,
+#         designation=data.designation,
+#         department=data.department,
+#         location=data.location
+#     )
+
+#     db.add(new_employee)
+#     db.commit()
+#     db.refresh(new_employee)
+
+#     return {"message": "Registration successful", "id": new_employee.id}
+
 
 from datetime import datetime
 @app.get("/authenticate")
 def authenticate_user(username: str, password: str, db: Session = Depends(get_db)):
     # Fetch user from DB
-    user = db.query(User).filter_by(username=username).first()
-    if not user:
+    employee = db.query(Employee).filter_by(username=username).first()
+    if not employee:
         raise HTTPException(status_code=404, detail="Username not found!")
 
     # Verify password
-    if not pbkdf2_sha256.verify(password, user.password):
+    if not pbkdf2_sha256.verify(password, employee.password):
         raise HTTPException(status_code=401, detail="Incorrect password!")
 
     # Update last login timestamp
-    user.last_login = datetime.utcnow()
+    employee.last_login = datetime.utcnow()
     db.commit()
 
-    return {"status": "success", "message": "Login successful!", "username": user.username}
+    return {"status": "success", "message": "Login successful!", "username": employee.username,"role": employee.role}
 
 
 if __name__ == "__main__":

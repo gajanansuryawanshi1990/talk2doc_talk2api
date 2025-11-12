@@ -22,11 +22,23 @@ st.set_page_config(
 
 API_BASE_URL = "http://localhost:8001"  # Change if your FastAPI runs on a different port
 
-def register_user(username: str, email: str, password: str):
+def register_user(username: str, email: str, password: str,  doj:datetime, designation: str, department: str, location: str) -> tuple[bool, str]:
     try:
+        # response = requests.post(
+        #     f"{API_BASE_URL}/register",
+        #     json={
+        #         "username": username,
+        #         "email": email,
+        #         "password": password,
+        #         "doj": str(doj),  # Convert date to string
+        #         "designation": designation,
+        #         "department": department,
+        #         "location": location
+        #     }
+        # )
         response = requests.post(
             f"{API_BASE_URL}/register",
-            params={"username": username, "email": email, "password": password}
+            params={"username": username, "email": email, "password": password,  "doj": str(doj),"designation": designation,"department": department,"location": location}
         )
         if response.status_code == 200:
             return True, response.json().get("message", "Registration successful!")
@@ -36,7 +48,7 @@ def register_user(username: str, email: str, password: str):
         return False, f"Error: {str(e)}"
 
 
-def authenticate_user(username: str, password: str) -> tuple[bool, str]:
+def authenticate_user(username: str, password: str) -> tuple[bool, str, str | None]:
     """Authenticate user login"""
     try:
         response = requests.get(
@@ -44,7 +56,11 @@ def authenticate_user(username: str, password: str) -> tuple[bool, str]:
             params={"username": username, "password": password}
         )
         if response.status_code == 200:
-            return True, response.json().get("message", "login successful!")
+            data = response.json()
+            
+            # return True, response.json().get("message", "login successful!")
+            # return True, response.get("message", "Login successful!"), response.get("role", "user")
+            return True, data.get("message", "Login successful!"), data.get("role", "user")
         else:
             return False, response.json().get("detail", "login failed!")
     except Exception as e:
@@ -144,7 +160,6 @@ def main():
     if st.session_state.authenticated:
         st.success(f"✅ Welcome back, {st.session_state.username}!")
         st.info("🚀 Redirecting to main application...")
-        # import pdb; pdb.set_trace()
         col1, col2, col3 = st.columns([1, 2, 1])
         # with col2:
         # st.button("🔓 Continue to Chat", type="primary"):
@@ -181,11 +196,11 @@ def main():
                 
                 if login_button:
                     if username and password:
-                        success, message = authenticate_user(username, password)
-                        
+                        success, message, role = authenticate_user(username, password)
                         if success:
                             st.session_state.authenticated = True
                             st.session_state.username = username
+                            st.session_state.role = role
                             st.success(message)
                             time.sleep(1)
                             st.rerun()
@@ -223,6 +238,13 @@ def main():
                 new_email = st.text_input("📧 Email", placeholder="Enter your email address")
                 new_password = st.text_input("🔒 Password", type="password", placeholder="Create a password")
                 confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password")
+                
+                # doj = st.date_input("📅 Date of Joining", value=date.today())
+                doj = st.date_input("📅 Date of Joining")
+                designation = st.text_input("🏢 Designation", placeholder="Enter your designation")
+                department = st.text_input("📂 Department", placeholder="Enter your department")
+                location = st.text_input("📍 Location", placeholder="Enter your location")
+
                 # Terms and conditions
                 agree_terms = st.checkbox("I agree to the Terms and Conditions")
                 
@@ -233,7 +255,7 @@ def main():
                     cancel_button = st.form_submit_button("❌ Cancel")
                 
                 if register_button:
-                    if new_username and new_email and new_password and confirm_password:
+                    if new_username and new_email and new_password and confirm_password and doj and designation and department and location:
                         if not agree_terms:
                             st.warning("⚠️ Please agree to the Terms and Conditions!")
                         elif new_password != confirm_password:
@@ -246,7 +268,7 @@ def main():
                             if not is_valid:
                                 st.error(f"❌ {password_msg}")
                             else:
-                                success, message = register_user(new_username, new_email, new_password)
+                                success, message = register_user(new_username, new_email, new_password, doj, designation, department, location)
                                 
                                 if success:
                                     st.success(message)

@@ -19,6 +19,7 @@ import requests
 st.set_page_config(page_title="AI Chatbot", page_icon="🤖", layout="centered")
 
 # Authentication check
+
 if 'authenticated' not in st.session_state or not st.session_state.authenticated:
     st.error("🚫 Access Denied! Please login first.")
     st.info("🔄 Redirecting to login page...")
@@ -29,7 +30,6 @@ if 'authenticated' not in st.session_state or not st.session_state.authenticated
             st.switch_page("login.py")
     
     st.stop()
- 
 # Initialize session state
 if "orchestrator" not in st.session_state:
     st.session_state["orchestrator"] = LangChainOrchestrator()
@@ -79,38 +79,102 @@ with st.sidebar:
         st.success("✅ Chat cleared!")
         time.sleep(1)
         st.rerun()
-   
-    st.markdown("---")
- 
-    # Upload Section
-    st.markdown("### 📄 Upload your data")
-    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
- 
-    if uploaded_file is not None:
-        if st.button("📤 Upload and Index", use_container_width=True):
-            files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
+    
+    
+    role = st.session_state.role
+
+    if role == "admin":
+
+        st.markdown("---")
+    
+        # Upload Section
+        st.markdown("### 📄 Upload your data")
+        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+    
+        if uploaded_file is not None:
+            if st.button("📤 Upload and Index", use_container_width=True):
+                files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
+                try:
+                    # Create a placeholder for the loading animation
+                    loading_placeholder = st.empty()
+                
+                    with loading_placeholder.container():
+                        st.info("⏳ Step 1/2: Uploading file...")
+                        progress_bar = st.progress(0)
+                    
+                    response = requests.post("http://localhost:8000/upload/", files=files)
+                
+                    if response.status_code == 200:
+                        with loading_placeholder.container():
+                            st.info("⚙️ Step 2/2: Indexing document (this takes ~35 seconds)...")
+                            progress_bar = st.progress(0)
+                        
+                            # Simulate progress over 35 seconds
+                            for percent in range(0, 101, 5):
+                                time.sleep(1.75)  # 35 seconds / 20 steps = 1.75 seconds per step
+                                progress_bar.progress(percent)
+                    
+                        loading_placeholder.empty()
+                        st.success("✅ File uploaded and indexed successfully!")
+                        time.sleep(2)  # Show success message briefly
+                        st.rerun()  # Refresh the page
+                    else:
+                        loading_placeholder.empty()
+                        st.error(f"❌ Error: {response.text}")
+                except Exception as e:
+                    st.error(f"❌ Connection error: {str(e)}")
+    
+        st.markdown("---")
+    
+        # Cleanup Section
+        st.markdown("### ☠️ Clean your data!!! ")
+        st.caption("Remove all uploaded PDFs for data privacy")
+    
+        if st.button("🧹 Reset & Cleanup Index", use_container_width=True, type="secondary"):
             try:
                 # Create a placeholder for the loading animation
                 loading_placeholder = st.empty()
-               
+            
                 with loading_placeholder.container():
-                    st.info("⏳ Step 1/2: Uploading file...")
+                    st.warning("⏳ Step 1/2: Deleting files and clearing index...")
                     progress_bar = st.progress(0)
-                   
-                response = requests.post("http://localhost:8000/upload/", files=files)
-               
+                
+                response = requests.post("http://localhost:8000/reset-index-and-cleanup")
+            
                 if response.status_code == 200:
+                    result = response.json()
+                    summary = result.get("summary", {})
+                
                     with loading_placeholder.container():
-                        st.info("⚙️ Step 2/2: Indexing document (this takes ~35 seconds)...")
+                        st.info("⚙️ Step 2/2: Rebuilding index (this takes ~35 seconds)...")
                         progress_bar = st.progress(0)
-                       
+                    
                         # Simulate progress over 35 seconds
                         for percent in range(0, 101, 5):
                             time.sleep(1.75)  # 35 seconds / 20 steps = 1.75 seconds per step
                             progress_bar.progress(percent)
-                   
+                
                     loading_placeholder.empty()
-                    st.success("✅ File uploaded and indexed successfully!")
+                    st.success("✅ Cleanup completed successfully!")
+                
+                    # Show detailed results
+                    with st.expander("📊 Cleanup Details", expanded=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Blobs Deleted", summary.get("blobs_deleted", 0))
+                            st.metric("Index Docs Cleared", summary.get("index_cleared", 0))
+                        with col2:
+                            st.metric("Blobs Kept", summary.get("blobs_kept", 0))
+                            st.metric("Indexer Triggered", "✅" if summary.get("indexer_triggered") else "❌")
+                    
+                        # Show deleted files
+                        blob_cleanup = result.get("results", {}).get("blob_cleanup", {})
+                        deleted_files = blob_cleanup.get("deleted_files", [])
+                        if deleted_files:
+                            st.markdown("**Deleted Files:**")
+                            for f in deleted_files:
+                                st.text(f"• {f}")
+                
                     time.sleep(2)  # Show success message briefly
                     st.rerun()  # Refresh the page
                 else:
@@ -118,66 +182,7 @@ with st.sidebar:
                     st.error(f"❌ Error: {response.text}")
             except Exception as e:
                 st.error(f"❌ Connection error: {str(e)}")
-   
-    st.markdown("---")
-   
-    # Cleanup Section
-    st.markdown("### ☠️ Clean your data!!! ")
-    st.caption("Remove all uploaded PDFs for data privacy")
-   
-    if st.button("🧹 Reset & Cleanup Index", use_container_width=True, type="secondary"):
-        try:
-            # Create a placeholder for the loading animation
-            loading_placeholder = st.empty()
-           
-            with loading_placeholder.container():
-                st.warning("⏳ Step 1/2: Deleting files and clearing index...")
-                progress_bar = st.progress(0)
-               
-            response = requests.post("http://localhost:8000/reset-index-and-cleanup")
-           
-            if response.status_code == 200:
-                result = response.json()
-                summary = result.get("summary", {})
-               
-                with loading_placeholder.container():
-                    st.info("⚙️ Step 2/2: Rebuilding index (this takes ~35 seconds)...")
-                    progress_bar = st.progress(0)
-                   
-                    # Simulate progress over 35 seconds
-                    for percent in range(0, 101, 5):
-                        time.sleep(1.75)  # 35 seconds / 20 steps = 1.75 seconds per step
-                        progress_bar.progress(percent)
-               
-                loading_placeholder.empty()
-                st.success("✅ Cleanup completed successfully!")
-               
-                # Show detailed results
-                with st.expander("📊 Cleanup Details", expanded=True):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Blobs Deleted", summary.get("blobs_deleted", 0))
-                        st.metric("Index Docs Cleared", summary.get("index_cleared", 0))
-                    with col2:
-                        st.metric("Blobs Kept", summary.get("blobs_kept", 0))
-                        st.metric("Indexer Triggered", "✅" if summary.get("indexer_triggered") else "❌")
-                   
-                    # Show deleted files
-                    blob_cleanup = result.get("results", {}).get("blob_cleanup", {})
-                    deleted_files = blob_cleanup.get("deleted_files", [])
-                    if deleted_files:
-                        st.markdown("**Deleted Files:**")
-                        for f in deleted_files:
-                            st.text(f"• {f}")
-               
-                time.sleep(2)  # Show success message briefly
-                st.rerun()  # Refresh the page
-            else:
-                loading_placeholder.empty()
-                st.error(f"❌ Error: {response.text}")
-        except Exception as e:
-            st.error(f"❌ Connection error: {str(e)}")
-             
+                
 # ---------------- MAIN UI ----------------
 cols = st.columns([1, 5, 1])
 with cols[1]:
