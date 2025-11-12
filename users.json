@@ -1,0 +1,14 @@
+{
+  "Gajanan": {
+    "email": "gajanan.suryawanshi@citiustech.com",
+    "password": "dd2a7fa0c53ca131f45ce9fcd4be7977d62c261b1c2a32983cf1761ec69ae792",
+    "created_at": "2025-11-11T20:29:18.774397",
+    "last_login": "2025-11-11T23:54:48.702053"
+  },
+  "mayur": {
+    "email": "mayur@gmail.com",
+    "password": "f88a9a2ca91a3889fd073583ea72735346bc8b34c1da7b55ca64390fa61bd953",
+    "created_at": "2025-11-11T23:15:03.445650",
+    "last_login": null
+  }
+}

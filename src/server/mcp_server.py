@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Enum
 from sqlalchemy.orm import sessionmaker, declarative_base, Session, relationship
 from sqlalchemy.exc import OperationalError
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import List, Optional
 import os
 import uvicorn
+import enum
+from passlib.hash import pbkdf2_sha256
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,8 +26,8 @@ load_dotenv()
 # engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
 import urllib
  
-server = 'CTAADHBBR8D3\SQLEXPRESS22'
-database = 'DemoDB'
+server = 'CTAAD9FLFFB3\\SQLEXPRESS_2022'
+database = 'sample'
 username = 'sa'
 password = 'password_123'
 driver = 'ODBC Driver 17 for SQL Server'
@@ -86,7 +88,6 @@ class Doctor(Base):
     patient = relationship("PatientInfo", back_populates="doctors")
     studies = relationship("Study", back_populates="doctor")
 
-
 class Study(Base):
     __tablename__ = "studies"
 
@@ -99,6 +100,23 @@ class Study(Base):
 
     patient = relationship("PatientInfo", back_populates="studies")
     doctor = relationship("Doctor", back_populates="studies")
+
+# class RoleEnum(enum.Enum):
+#     admin = "admin"
+#     user = "user"
+
+class User(Base):
+    __tablename__ = "user_info"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), nullable=False, unique=True)
+    password = Column(String(255), nullable=False)  # Store hashed password
+    email = Column(String(100), nullable=False, unique=True)
+    # role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.user)
+
+    # def __repr__(self):
+    #     return f"<Login(username={self.username}, email={self.email}, role={self.role})>"
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -148,6 +166,18 @@ class StudySchema(BaseModel):
     study_date: str
     findings: str
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserSchema(BaseModel):
+    id: int
+    username: str
+    password: str  # This will hold hashed password, not plain text
+    email: EmailStr
+    # role: str  # "admin" or "user"
+
+    # Enable ORM mode for SQLAlchemy compatibility
+    model_config = ConfigDict(from_attributes=True)
+
 
 # ------------------- ROUTES -------------------
 @app.get("/")
@@ -202,6 +232,42 @@ def get_studies_for_patient(patient_id: int, db: Session = Depends(get_db)):
 @app.get("/doctor/{doctor_id}/studies", response_model=List[StudySchema])
 def get_studies_for_doctor(doctor_id: int, db: Session = Depends(get_db)):
     return db.query(Study).filter(Study.doctor_id == doctor_id).all()
+
+
+@app.post("/register")
+def register_user(username: str, email: str, password: str, db: Session = Depends(get_db)):
+    # Check if username or email exists
+    if db.query(User).filter_by(username=username).first():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    if db.query(User).filter_by(email=email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Create new user
+    hashed_password = pbkdf2_sha256.hash(password)
+    new_user = User(username=username, email=email, password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message": "Registration successful", "user_id": new_user.id}
+
+from datetime import datetime
+@app.get("/authenticate")
+def authenticate_user(username: str, password: str, db: Session = Depends(get_db)):
+    # Fetch user from DB
+    user = db.query(User).filter_by(username=username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Username not found!")
+
+    # Verify password
+    if not pbkdf2_sha256.verify(password, user.password):
+        raise HTTPException(status_code=401, detail="Incorrect password!")
+
+    # Update last login timestamp
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    return {"status": "success", "message": "Login successful!", "username": user.username}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)

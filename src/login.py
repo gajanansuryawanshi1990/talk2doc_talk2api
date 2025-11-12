@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 import time
+import requests
 
 # Page config
 st.set_page_config(
@@ -14,68 +15,40 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# File to store user credentials
-USERS_FILE = "users.json" #fix 
+# def hash_password(password: str) -> str:
+#     """Hash password using SHA-256"""
+#     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def hash_password(password: str) -> str:
-    """Hash password using SHA-256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+API_BASE_URL = "http://localhost:8001"  # Change if your FastAPI runs on a different port
 
-def load_users() -> dict:
-    """Load users from JSON file"""
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
+def register_user(username: str, email: str, password: str):
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/register",
+            params={"username": username, "email": email, "password": password}
+        )
+        if response.status_code == 200:
+            return True, response.json().get("message", "Registration successful!")
+        else:
+            return False, response.json().get("detail", "Registration failed!")
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
-def save_users(users: dict):
-    """Save users to JSON file"""
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users, f, indent=2)
-
-def register_user(username: str, email: str, password: str) -> tuple[bool, str]:
-    """Register a new user"""
-    users = load_users()
-    
-    # Check if username already exists
-    if username in users:
-        return False, "Username already exists!"
-    
-    # Check if email already exists
-    for user_data in users.values():
-        if user_data.get('email') == email:
-            return False, "Email already registered!"
-    
-    # Register new user
-    users[username] = {
-        'email': email,
-        'password': hash_password(password),
-        'created_at': datetime.now().isoformat(),
-        'last_login': None
-    }
-    
-    save_users(users)
-    return True, "Registration successful!"
 
 def authenticate_user(username: str, password: str) -> tuple[bool, str]:
     """Authenticate user login"""
-    users = load_users()
-    
-    if username not in users:
-        return False, "Username not found!"
-    
-    if users[username]['password'] != hash_password(password):
-        return False, "Incorrect password!"
-    
-    # Update last login
-    users[username]['last_login'] = datetime.now().isoformat()
-    save_users(users)
-    
-    return True, "Login successful!"
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/authenticate",
+            params={"username": username, "password": password}
+        )
+        if response.status_code == 200:
+            return True, response.json().get("message", "login successful!")
+        else:
+            return False, response.json().get("detail", "login failed!")
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
 def validate_email(email: str) -> bool:
     """Basic email validation"""
@@ -171,13 +144,13 @@ def main():
     if st.session_state.authenticated:
         st.success(f"✅ Welcome back, {st.session_state.username}!")
         st.info("🚀 Redirecting to main application...")
-        
+        # import pdb; pdb.set_trace()
         col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔓 Continue to Chat", type="primary"):
+        # with col2:
+        # st.button("🔓 Continue to Chat", type="primary"):
                 # Redirect to main app
-                st.switch_page("app-ui.py")
-            
+        st.switch_page("pages/app-ui.py")
+        with col2:    
             if st.button("🚪 Logout", type="secondary"):
                 st.session_state.authenticated = False
                 st.session_state.username = ""
@@ -203,8 +176,8 @@ def main():
                 col_a, col_b = st.columns(2)
                 with col_a:
                     login_button = st.form_submit_button("🚀 Login", type="primary")
-                with col_b:
-                    forgot_button = st.form_submit_button("❓ Demo Login")
+                # with col_b:
+                #     forgot_button = st.form_submit_button("❓ Demo Login")
                 
                 if login_button:
                     if username and password:
@@ -221,13 +194,13 @@ def main():
                     else:
                         st.warning("⚠️ Please fill in all fields!")
                 
-                if forgot_button:
-                    # Demo login for testing
-                    st.session_state.authenticated = True
-                    st.session_state.username = "demo_user"
-                    st.success("✅ Demo login successful!")
-                    time.sleep(1)
-                    st.rerun()
+                # if forgot_button:
+                    # # Demo login for testing
+                    # st.session_state.authenticated = True
+                    # st.session_state.username = "demo_user"
+                    # st.success("✅ Demo login successful!")
+                    # time.sleep(1)
+                    # st.rerun()
             
             # Switch to register
             st.markdown("""
@@ -250,7 +223,6 @@ def main():
                 new_email = st.text_input("📧 Email", placeholder="Enter your email address")
                 new_password = st.text_input("🔒 Password", type="password", placeholder="Create a password")
                 confirm_password = st.text_input("🔒 Confirm Password", type="password", placeholder="Confirm your password")
-                
                 # Terms and conditions
                 agree_terms = st.checkbox("I agree to the Terms and Conditions")
                 
@@ -261,7 +233,7 @@ def main():
                     cancel_button = st.form_submit_button("❌ Cancel")
                 
                 if register_button:
-                    if new_username and new_email and new_password and confirm_password:
+                    if new_username and new_email and new_password and confirm_password and role:
                         if not agree_terms:
                             st.warning("⚠️ Please agree to the Terms and Conditions!")
                         elif new_password != confirm_password:
@@ -274,7 +246,7 @@ def main():
                             if not is_valid:
                                 st.error(f"❌ {password_msg}")
                             else:
-                                success, message = register_user(new_username, new_email, new_password)
+                                success, message = register_user(new_username, new_email, new_password,role)
                                 
                                 if success:
                                     st.success(message)
