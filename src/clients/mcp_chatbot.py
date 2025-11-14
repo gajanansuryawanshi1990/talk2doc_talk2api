@@ -37,7 +37,7 @@ async def run_chatbot():
     print("Type 'exit' to quit.")
  
     messages = [
-        {"role": "system", "content": "You are a helpful assistant that can manage patient and doctor information. Use the available tools to answer questions and fulfill requests."},
+        {"role": "system", "content": "You are a helpful assistant that can manage employee information. Use the available tools to answer questions and fulfill requests."},
     ]
  
     while True:

@@ -359,7 +359,20 @@ def ask_llm(query: str, context_text: str, history_msgs: list, chunks: list = No
         "At the end of your answer, if any sources were used, include a 'Sources' section listing ONLY those documents. "
         "Format the sources as a numbered list (e.g., 'Sources:\n1. document1.pdf\n2. document2.pdf') if more than one, or 'Source: document1.pdf' if only one.\n"
     )
-   
+    # system_prompt = (
+    #     "You are a helpful assistant that answers ONLY using the provided context.\n"
+    #     "If the answer is not present in the context, reply: 'I can't find this in the uploaded PDF.'\n"
+    #     "When referencing sources, only list the specific document name(s) (e.g., 'cricket.pdf') that were directly used to answer the question.\n"
+    #     "At the end of your answer, if any sources were used, include a 'Sources' section listing ONLY those documents. "
+    #     "Format the sources as a numbered list (e.g., 'Sources:\n1. document1.pdf\n2. document2.pdf') if more than one, or 'Source: document1.pdf' if only one.\n"
+    #     "\n"
+    #     "Additional capability:\n"
+    #     "- If the user asks 'Who am I?' or similar identity-related questions, call the Employee API to fetch user details.\n"
+    #     "- Use the employee_id or username from the session or context to query the Employee API.\n"
+    #     "- Return all available employee details (e.g., username, email, role, DOJ, designation, department, location) in a structured format.\n"
+    #     "- Do NOT fabricate data; only return what the API provides.\n"
+    #     "- If the API fails or no data is found, respond: 'Unable to retrieve employee details at the moment.'\n"
+    # )
     messages = [{"role": "system", "content": system_prompt}] + history_msgs + [
         {"role": "user", "content": f"Context:\n{context_text}{source_reference_text}\n\nQuestion:\n{query}"}
     ]
