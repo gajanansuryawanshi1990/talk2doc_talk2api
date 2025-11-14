@@ -200,212 +200,201 @@ if st.session_state["history"]:
             st.markdown(msg["content"])
  
 # Chat input
-prompt = st.chat_input("Ask about documents, healthcare data, or just say hi...")
+prompt = st.chat_input("Ask about documents, employee data, or just say hi...")
 if prompt:
     st.session_state["history"].append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
- 
-    try:
-        with st.spinner("🤔 Thinking..."):
-            # Run async process_query
-            result = asyncio.run(
-                st.session_state["orchestrator"].process_query(
-                    query=prompt,
-                    history=st.session_state["history"][:-1],  # Exclude the current user message
-                )
-            )
- 
-        # Render assistant answer
-        answer = result.answer
+
+    # Quick local handling for identity queries
+    normalized = prompt.strip().lower()
+    if normalized in ("who am i", "whoami", "who am i?"):
+        answer = f"You are {st.session_state.get('username', 'Unknown User')} (ID: {st.session_state.get('user_id', 'N/A')})."
         with st.chat_message("assistant"):
             st.markdown(answer)
         st.session_state["history"].append({"role": "assistant", "content": answer})
- 
-        # Show tool usage and additional info
-        tools_used = result.tools_used
-        sources = result.sources
-        debug = result.debug
-        latency_ms = result.latency_ms
-       
-        # Create metrics row
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("⚡ Latency", f"{latency_ms}ms")
-        with col2:
+    else:
+        try:
+            with st.spinner("🤔 Thinking..."):
+                # Run async process_query and pass the current user's id and role
+                result = asyncio.run(
+                    st.session_state["orchestrator"].process_query(
+                        query=prompt,
+                        history=st.session_state["history"][:-1],  # Exclude the current user message
+                        user_id=st.session_state.get('user_id'),
+                        user_role=st.session_state.get('role')
+                    )
+                )
+
+            # Render assistant answer
+            answer = result.answer
+            with st.chat_message("assistant"):
+                st.markdown(answer)
+            st.session_state["history"].append({"role": "assistant", "content": answer})
+
+            # Show tool usage and additional info
+            tools_used = result.tools_used
+            sources = result.sources
+            debug = result.debug
+            latency_ms = result.latency_ms
+           
+            # Create metrics row
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("⚡ Latency", f"{latency_ms}ms")
+            with col2:
+                if tools_used:
+                    st.metric("🔧 Tools Used", len(tools_used))
+                else:
+                    st.metric("💭 Response Type", "Direct")
+
+            # Show tools used
             if tools_used:
-                st.metric("🔧 Tools Used", len(tools_used))
-            else:
-                st.metric("💭 Response Type", "Direct")
-        # with col3:
-        #     if sources:
-        #         st.metric("📚 Sources", len(sources))
-        #     else:
-        #         st.metric("📚 Sources", "0")
-       
-        # Show tools used
-        if tools_used:
-            with st.expander(f"🔧 Tools Used: {', '.join(tools_used)}", expanded=False):
-                for tool in tools_used:
-                    if tool == "search_documents":
-                        st.markdown("**📄 Document Search Tool**")
-                        st.caption("Searched through uploaded documents")
-                    else:
-                        st.markdown(f"**🏥 Healthcare Tool: `{tool}`**")
-                        st.caption("Queried healthcare database")
-       
-        # Show RAG sources if available
-        # if sources:
-        #     with st.expander(f"🔎 Retrieved Document Context ({len(sources)} chunks)", expanded=False):
-        #         for i, chunk in enumerate(sources, 1):
-        #             st.markdown(f"**Chunk {i}** — *{chunk.get('source', 'Unknown Source')}*")
-        #             with st.container():
-        #                 st.text_area(
-        #                     f"Content {i}",
-        #                     chunk.get("content", ""),
-        #                     height=100,
-        #                     key=f"chunk_{i}_{st.session_state['active_chat_id']}_{len(st.session_state['history'])}",
-        #                     label_visibility="collapsed"
-        #                 )
-        #             st.markdown("---")
-       
-        # Show MCP operations if available
-        if debug.get("mcp_operations"):
-            with st.expander("🏥 Healthcare Database Operations", expanded=False):
-                mcp_ops = debug["mcp_operations"]
-                st.markdown(f"**Total Operations:** {len(mcp_ops)}")
-                for i, op in enumerate(mcp_ops, 1):
-                    tool_name = op.get('tool', op.get('name', 'Unknown Tool'))
-                    st.markdown(f"### Operation {i}: `{tool_name}`")
-                   
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.markdown("**Arguments:**")
-                        st.json(op.get("args", op.get("arguments", {})))
-                    with col_b:
-                        st.markdown("**Result:**")
-                        st.json(op.get("result", {}))
-                   
-                    if i < len(mcp_ops):
-                        st.markdown("---")
-       
-        # Show debug info if there are errors
-        if debug.get("error"):
-            with st.expander("⚠️ Debug Information", expanded=True):
-                st.error(debug["error"])
-                if debug.get("traceback"):
-                    st.code(debug["traceback"], language="text")
-       
-        # Show QnT Metrics if available
-        if result.qnt_metrics:
-            with st.expander("📊 Quality & Trust (QnT) Metrics", expanded=True):
-                qnt = result.qnt_metrics
-               
-                # Create metrics display
-                col_qnt1, col_qnt2, col_qnt3, col_qnt4 = st.columns(4)
-               
-                with col_qnt1:
-                    rouge_score = qnt.get("rouge_avg", 0.0)
-                    st.metric(
-                        "📝 ROUGE Score",
-                        f"{rouge_score:.3f}",
-                        help="Measures overlap with source content (0-1, higher is better)"
-                    )
-                    # Color indicator
-                    if rouge_score >= 0.5:
-                        st.success("✓ Good overlap")
-                    elif rouge_score >= 0.3:
-                        st.warning("⚠ Moderate overlap")
-                    else:
-                        st.error("✗ Low overlap")
-               
-                with col_qnt2:
-                    bleu_score = qnt.get("bleu", 0.0)
-                    st.metric(
-                        "🎯 BLEU Score",
-                        f"{bleu_score:.3f}",
-                        help="Measures n-gram precision (0-1, higher is better)"
-                    )
-                    if bleu_score >= 0.3:
-                        st.success("✓ Good precision")
-                    elif bleu_score >= 0.15:
-                        st.warning("⚠ Moderate precision")
-                    else:
-                        st.error("✗ Low precision")
-               
-                with col_qnt3:
-                    faithfulness_score = qnt.get("faithfulness", 0.0)
-                    st.metric(
-                        "✅ Faithfulness",
-                        f"{faithfulness_score:.3f}",
-                        help="Measures factual grounding in context (0-1, higher is better)"
-                    )
-                    if faithfulness_score >= 0.7:
-                        st.success("✓ Highly faithful")
-                    elif faithfulness_score >= 0.4:
-                        st.warning("⚠ Moderately faithful")
-                    else:
-                        st.error("✗ Low faithfulness")
-               
-                with col_qnt4:
-                    toxicity_score = qnt.get("toxicity", 0.0)
-                    st.metric(
-                        "🛡️ Toxicity",
-                        f"{toxicity_score:.3f}",
-                        help="Measures harmful content (0-1, lower is better)"
-                    )
-                    if toxicity_score <= 0.2:
-                        st.success("✓ Safe content")
-                    elif toxicity_score <= 0.5:
-                        st.warning("⚠ Moderate toxicity")
-                    else:
-                        st.error("✗ High toxicity")
-               
-                # Show faithfulness reasoning if available
-                if qnt.get("faithfulness_reasoning"):
-                    st.markdown("**Faithfulness Analysis:**")
-                    st.info(qnt["faithfulness_reasoning"])
-               
-                # Show detailed metrics in collapsible section
-                if qnt.get("full_evaluation"):
-                    with st.expander("🔬 Detailed QnT Analysis", expanded=False):
-                        full_eval = qnt["full_evaluation"]
+                with st.expander(f"🔧 Tools Used: {', '.join(tools_used)}", expanded=False):
+                    for tool in tools_used:
+                        if tool == "search_documents":
+                            st.markdown("**📄 Document Search Tool**")
+                            st.caption("Searched through uploaded documents")
+                        else:
+                            st.markdown(f"**🏥 Healthcare Tool: `{tool}`**")
+                            st.caption("Queried healthcare database")
+
+            # Show MCP operations if available
+            if debug.get("mcp_operations"):
+                with st.expander("🏥 Healthcare Database Operations", expanded=False):
+                    mcp_ops = debug["mcp_operations"]
+                    st.markdown(f"**Total Operations:** {len(mcp_ops)}")
+                    for i, op in enumerate(mcp_ops, 1):
+                        tool_name = op.get('tool', op.get('name', 'Unknown Tool'))
+                        st.markdown(f"### Operation {i}: `{tool_name}`")
                        
-                        # ROUGE details
-                        if "rouge" in full_eval:
-                            st.markdown("**ROUGE Breakdown:**")
-                            rouge_data = full_eval["rouge"]
-                            col_r1, col_r2, col_r3 = st.columns(3)
-                            with col_r1:
-                                st.metric("ROUGE-1", f"{rouge_data.get('rouge1', 0):.4f}")
-                            with col_r2:
-                                st.metric("ROUGE-2", f"{rouge_data.get('rouge2', 0):.4f}")
-                            with col_r3:
-                                st.metric("ROUGE-L", f"{rouge_data.get('rougeL', 0):.4f}")
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.markdown("**Arguments:**")
+                            st.json(op.get("args", op.get("arguments", {})))
+                        with col_b:
+                            st.markdown("**Result:**")
+                            st.json(op.get("result", {}))
                        
-                        # Toxicity details
-                        if "toxicity" in full_eval and isinstance(full_eval["toxicity"], dict):
-                            st.markdown("**Toxicity Breakdown:**")
-                            tox_data = full_eval["toxicity"]
-                            col_t1, col_t2, col_t3 = st.columns(3)
-                            with col_t1:
-                                st.metric("Severe Toxicity", f"{tox_data.get('severe_toxicity', 0):.4f}")
-                                st.metric("Obscene", f"{tox_data.get('obscene', 0):.4f}")
-                            with col_t2:
-                                st.metric("Threat", f"{tox_data.get('threat', 0):.4f}")
-                                st.metric("Insult", f"{tox_data.get('insult', 0):.4f}")
-                            with col_t3:
-                                st.metric("Identity Attack", f"{tox_data.get('identity_attack', 0):.4f}")
-       
-        # Show all debug info in collapsed expander
-        if debug and not debug.get("error"):
-            with st.expander("🔍 Debug Information", expanded=False):
-                st.json(debug)
- 
-    except Exception as e:
-        with st.chat_message("assistant"):
-            st.error(f"❌ Something went wrong: {e}")
-            import traceback
-            with st.expander("Error Details"):
-                st.code(traceback.format_exc())
- 
+                        if i < len(mcp_ops):
+                            st.markdown("---")
+
+            # Show debug info if there are errors
+            if debug.get("error"):
+                with st.expander("⚠️ Debug Information", expanded=True):
+                    st.error(debug["error"])
+                    if debug.get("traceback"):
+                        st.code(debug["traceback"], language="text")
+
+            # Show QnT Metrics if available
+            if result.qnt_metrics:
+                with st.expander("📊 Quality & Trust (QnT) Metrics", expanded=True):
+                    qnt = result.qnt_metrics
+                   
+                    # Create metrics display
+                    col_qnt1, col_qnt2, col_qnt3, col_qnt4 = st.columns(4)
+                   
+                    with col_qnt1:
+                        rouge_score = qnt.get("rouge_avg", 0.0)
+                        st.metric(
+                            "📝 ROUGE Score",
+                            f"{rouge_score:.3f}",
+                            help="Measures overlap with source content (0-1, higher is better)"
+                        )
+                        # Color indicator
+                        if rouge_score >= 0.5:
+                            st.success("✓ Good overlap")
+                        elif rouge_score >= 0.3:
+                            st.warning("⚠ Moderate overlap")
+                        else:
+                            st.error("✗ Low overlap")
+                   
+                    with col_qnt2:
+                        bleu_score = qnt.get("bleu", 0.0)
+                        st.metric(
+                            "🎯 BLEU Score",
+                            f"{bleu_score:.3f}",
+                            help="Measures n-gram precision (0-1, higher is better)"
+                        )
+                        if bleu_score >= 0.3:
+                            st.success("✓ Good precision")
+                        elif bleu_score >= 0.15:
+                            st.warning("⚠ Moderate precision")
+                        else:
+                            st.error("✗ Low precision")
+                   
+                    with col_qnt3:
+                        faithfulness_score = qnt.get("faithfulness", 0.0)
+                        st.metric(
+                            "✅ Faithfulness",
+                            f"{faithfulness_score:.3f}",
+                            help="Measures factual grounding in context (0-1, higher is better)"
+                        )
+                        if faithfulness_score >= 0.7:
+                            st.success("✓ Highly faithful")
+                        elif faithfulness_score >= 0.4:
+                            st.warning("⚠ Moderately faithful")
+                        else:
+                            st.error("✗ Low faithfulness")
+                   
+                    with col_qnt4:
+                        toxicity_score = qnt.get("toxicity", 0.0)
+                        st.metric(
+                            "🛡️ Toxicity",
+                            f"{toxicity_score:.3f}",
+                            help="Measures harmful content (0-1, lower is better)"
+                        )
+                        if toxicity_score <= 0.2:
+                            st.success("✓ Safe content")
+                        elif toxicity_score <= 0.5:
+                            st.warning("⚠ Moderate toxicity")
+                        else:
+                            st.error("✗ High toxicity")
+                   
+                    # Show faithfulness reasoning if available
+                    if qnt.get("faithfulness_reasoning"):
+                        st.markdown("**Faithfulness Analysis:**")
+                        st.info(qnt["faithfulness_reasoning"])
+                   
+                    # Show detailed metrics in collapsible section
+                    if qnt.get("full_evaluation"):
+                        with st.expander("🔬 Detailed QnT Analysis", expanded=False):
+                            full_eval = qnt["full_evaluation"]
+                           
+                            # ROUGE details
+                            if "rouge" in full_eval:
+                                st.markdown("**ROUGE Breakdown:**")
+                                rouge_data = full_eval["rouge"]
+                                col_r1, col_r2, col_r3 = st.columns(3)
+                                with col_r1:
+                                    st.metric("ROUGE-1", f"{rouge_data.get('rouge1', 0):.4f}")
+                                with col_r2:
+                                    st.metric("ROUGE-2", f"{rouge_data.get('rouge2', 0):.4f}")
+                                with col_r3:
+                                    st.metric("ROUGE-L", f"{rouge_data.get('rougeL', 0):.4f}")
+                           
+                            # Toxicity details
+                            if "toxicity" in full_eval and isinstance(full_eval["toxicity"], dict):
+                                st.markdown("**Toxicity Breakdown:**")
+                                tox_data = full_eval["toxicity"]
+                                col_t1, col_t2, col_t3 = st.columns(3)
+                                with col_t1:
+                                    st.metric("Severe Toxicity", f"{tox_data.get('severe_toxicity', 0):.4f}")
+                                    st.metric("Obscene", f"{tox_data.get('obscene', 0):.4f}")
+                                with col_t2:
+                                    st.metric("Threat", f"{tox_data.get('threat', 0):.4f}")
+                                    st.metric("Insult", f"{tox_data.get('insult', 0):.4f}")
+                                with col_t3:
+                                    st.metric("Identity Attack", f"{tox_data.get('identity_attack', 0):.4f}")
+
+            # Show all debug info in collapsed expander
+            if debug and not debug.get("error"):
+                with st.expander("🔍 Debug Information", expanded=False):
+                    st.json(debug)
+
+        except Exception as e:
+            with st.chat_message("assistant"):
+                st.error(f"❌ Something went wrong: {e}")
+                import traceback
+                with st.expander("Error Details"):
+                    st.code(traceback.format_exc())

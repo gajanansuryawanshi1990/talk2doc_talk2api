@@ -48,8 +48,8 @@ def register_user(username: str, email: str, password: str,  doj:datetime, desig
         return False, f"Error: {str(e)}"
 
 
-def authenticate_user(username: str, password: str) -> tuple[bool, str, str | None]:
-    """Authenticate user login"""
+def authenticate_user(username: str, password: str) -> tuple[bool, str, str | None, str | None]:
+    """Authenticate user login and return (success, message, role, id)"""
     try:
         response = requests.get(
             f"{API_BASE_URL}/authenticate",
@@ -57,14 +57,18 @@ def authenticate_user(username: str, password: str) -> tuple[bool, str, str | No
         )
         if response.status_code == 200:
             data = response.json()
-            
-            # return True, response.json().get("message", "login successful!")
-            # return True, response.get("message", "Login successful!"), response.get("role", "user")
-            return True, data.get("message", "Login successful!"), data.get("role", "user")
+            # return (success, message, role, id)
+            return True, data.get("message", "Login successful!"), data.get("role", "user"), data.get("id")
         else:
-            return False, response.json().get("detail", "login failed!")
+            # Return consistent tuple on failure
+            detail = None
+            try:
+                detail = response.json().get("detail", "login failed!")
+            except Exception:
+                detail = "login failed!"
+            return False, detail, None, None
     except Exception as e:
-        return False, f"Error: {str(e)}"
+        return False, f"Error: {str(e)}", None, None
 
 def validate_email(email: str) -> bool:
     """Basic email validation"""
@@ -196,11 +200,12 @@ def main():
                 
                 if login_button:
                     if username and password:
-                        success, message, role = authenticate_user(username, password)
+                        success, message, role, id = authenticate_user(username, password)
                         if success:
                             st.session_state.authenticated = True
                             st.session_state.username = username
                             st.session_state.role = role
+                            st.session_state.user_id = id  # store user id in session state
                             st.success(message)
                             time.sleep(1)
                             st.rerun()

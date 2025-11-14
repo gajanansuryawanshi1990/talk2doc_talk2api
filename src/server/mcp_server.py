@@ -302,8 +302,18 @@ def authenticate_user(username: str, password: str, db: Session = Depends(get_db
     employee.last_login = datetime.utcnow()
     db.commit()
 
-    return {"status": "success", "message": "Login successful!", "username": employee.username,"role": employee.role}
+    return {"status": "success", "message": "Login successful!", "username": employee.username,"role": employee.role,"id": employee.id}
 
+@app.get("/employee/{employee_id}", response_model=EmployeeSchema)
+def get_employee_by_id(employee_id: int, db: Session = Depends(get_db)):
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="employee not found")
+    return emp
+
+@app.get("/employees", response_model=List[EmployeeSchema])
+def get_all_employees(db: Session = Depends(get_db)):
+    return db.query(Employee).all()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)

@@ -1,6 +1,7 @@
 import json
 import httpx
 import os
+from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -128,11 +129,36 @@ TOOLS_SPEC = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_employee_by_id",
+            "description": "Get employee details by employee ID from the session.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "employee_id": {"type": "integer", "description": "The ID of the employee"}
+                },
+                "required": ["employee_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_all_employees",
+            "description": "Get a list of all employees.",
+            "parameters": {
+                "type": "object",
+                "properties": {}, # No parameters
+            },
+        },
+    },
 ]
 
 
 # --- Custom Tool Execution Function ---
-async def call_fastapi_tool(tool_call, base_url: str = FASTAPI_BASE_URL):
+async def call_fastapi_tool(tool_call, base_url: str = FASTAPI_BASE_URL, user_id: Optional[str] = None, user_role: Optional[str] = None):
     """
     Executes a FastAPI tool based on the OpenAI tool call object.
     Uses httpx for async HTTP requests.
@@ -150,6 +176,30 @@ async def call_fastapi_tool(tool_call, base_url: str = FASTAPI_BASE_URL):
                 if patient_id is None:
                     raise ValueError("patient_id is required for get_patient_by_id")
                 url = f"{base_url}/patient/{patient_id}"
+                response = await client.get(url)
+
+            elif function_name == "get_employee_by_id":
+                employee_id = function_args.get("employee_id")
+                if employee_id is None:
+                    raise ValueError("employee_id is required for get_employee_by_id")
+
+                # Enforce role-based access: admins can access any employee; users only their own
+                if user_role != 'admin':
+                    # If user_id not provided, deny
+                    if user_id is None:
+                        return {"error": "Access denied: missing user context"}
+                    # Only allow access if requested id matches session user id
+                    try:
+                        # cast to int for comparison if possible
+                        req_id = int(employee_id)
+                        sess_id = int(user_id)
+                    except Exception:
+                        return {"error": "Invalid id format"}
+
+                    if req_id != sess_id:
+                        return {"error": "Access denied: insufficient permissions"}
+
+                url = f"{base_url}/employee/{employee_id}"
                 response = await client.get(url)
 
             elif function_name == "get_all_patients":
@@ -197,6 +247,10 @@ async def call_fastapi_tool(tool_call, base_url: str = FASTAPI_BASE_URL):
                 if doctor_id is None:
                     raise ValueError("doctor_id is required for get_studies_for_doctor")
                 url = f"{base_url}/doctor/{doctor_id}/studies"
+                response = await client.get(url)
+
+            elif function_name == "get_all_employees":
+                url = f"{base_url}/employees"
                 response = await client.get(url)
 
             else:
