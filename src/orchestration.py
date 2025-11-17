@@ -11,6 +11,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel
 import re
+from qnteval.qnt import evaluate_task
+import uuid
  
 # Import your existing components
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -126,6 +128,18 @@ class LangChainOrchestrator:
             # and let the orchestrator format the final sources.
             # However, for consistency, we'll keep ask_llm's full behavior.
             answer = ask_llm(query, context_text, [], chunks)
+            #==================================================
+            case_id = str(uuid.uuid4())
+            session_id = str(uuid.uuid4())
+            task = "Q & A"
+            query = query
+            response = answer
+            context = context_text
+            latency = 0 # Latency is not applicable for this pipeline
+            cost = 0
+            res = evaluate_task(case_id, session_id, task, query, response, context, latency, cost)
+            print(f"[RAG Pipeline] QnT Evaluation: {res}")
+            #==================================================
            
             # Extract just the answer part if ask_llm adds source formatting.
             # The orchestrator will handle final source aggregation.
@@ -155,7 +169,8 @@ class LangChainOrchestrator:
                 "sources": chunks, # Raw chunks for source processing by orchestrator
                 "identified_sources": rag_sources_extracted, # Sources identified by RAG LLM
                 "num_chunks": len(chunks),
-                "context_text": context_text
+                "context_text": context_text,
+                "qnt_eval": res, 
             }
         except Exception as e:
             print(f"[RAG Pipeline Error] {str(e)}")
@@ -165,7 +180,8 @@ class LangChainOrchestrator:
                 "answer": "Failed to search documents.",
                 "sources": [],
                 "identified_sources": [],
-                "context_text": ""
+                "context_text": "",
+                "qnt_eval": None,
             }
    
     async def _execute_mcp_pipeline(self, query: str, history: List[Dict[str, str]], user_id: Optional[str] = None, user_role: Optional[str] = None) -> Dict[str, Any]:
@@ -359,6 +375,10 @@ class LangChainOrchestrator:
                                 query=args.get("query", ""), # Ensure query is passed
                                 top_k=args.get("top_k", top_k)
                             )
+                            if rag_result.get("qnt_eval") is not None:
+                               all_debug_info.setdefault("rag_qnt_evals", []).append(rag_result.get("qnt_eval"))
+                               all_debug_info.setdefault("qnt_eval", []).append(rag_result.get("qnt_eval"))
+                            
                             tool_output_content = json.dumps({
                                 "answer": rag_result.get("answer"),
                                 "identified_sources": rag_result.get("identified_sources"),

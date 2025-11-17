@@ -227,6 +227,41 @@ if prompt:
                 )
 
             # Render assistant answer
+            
+            confidence_score = result.debug['rag_qnt_evals'][0]['confidence_score']
+
+            factual_accuracy = confidence_score.get('Factual_Accuracy', 0.0)
+            hallucination = confidence_score.get('Hallucination Degree', 0.0)
+            toxicity = confidence_score.get('Toxicity', 0.0)
+            summary_coverage_score = confidence_score.get('Accuracy', 0.0)
+            # overall_score = confidence_score.get('Score', 0.0)
+            # coverage_score = confidence_score.get('Coverage Score', 0.0)
+            # Safely extract confidence_score from orchestrator debug (if present)
+            # confidence_score = {}
+            # try:
+            #     confidence_score = (
+            #         result.debug.get("qnt_eval", [])[0].get("confidence_score", {})
+            #         if getattr(result, "debug", None) else {}
+            #     )
+            # except Exception:
+            #     confidence_score = {}
+
+            # factual_accuracy = float(confidence_score.get("Factual_Accuracy") or 0.0)
+            # response_relevance = float(confidence_score.get("Response_Relevance") or 0.0)
+            # hallucination = float(confidence_score.get("Hallucination") or 0.0)
+            # overall_score = float(confidence_score.get("Score") or 0.0)
+
+            # Show the four quick QnT metrics prominently
+            col_fa, col_rr, col_hall, col_over = st.columns(4)
+            with col_fa:
+                st.metric("✅ Factual Accuracy", f"{factual_accuracy:.3f}")
+            with col_rr:
+                st.metric("🧠 Hallucination", f"{hallucination:.3f}")
+            with col_hall:
+                st.metric("🔎 Toxic Opinions", f"{toxicity:.3f}")
+            with col_over:
+                st.metric("📊 Summary Coverage Score", f"{summary_coverage_score:.3f}")
+
             answer = result.answer
             with st.chat_message("assistant"):
                 st.markdown(answer)

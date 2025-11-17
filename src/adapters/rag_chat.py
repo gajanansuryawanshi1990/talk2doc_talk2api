@@ -355,7 +355,7 @@ def ask_llm(query: str, context_text: str, history_msgs: list, chunks: list = No
     system_prompt = (
         "You are a helpful assistant that answers ONLY using the provided context.\n"
         "If the answer is not present in the context, reply: 'I can't find this in the uploaded PDF.'\n"
-        "When referencing sources, only list the specific document name(s) (e.g., 'cricket.pdf') that were directly used to answer the question.\n"
+        "When referencing sources, only list the specific document name(s) (e.g., 'hr_policy.pdf') that were directly used to answer the question.\n"
         "At the end of your answer, if any sources were used, include a 'Sources' section listing ONLY those documents. "
         "Format the sources as a numbered list (e.g., 'Sources:\n1. document1.pdf\n2. document2.pdf') if more than one, or 'Source: document1.pdf' if only one.\n"
     )
@@ -463,21 +463,21 @@ if __name__ == "__main__":
     print("=" * 60)
    
     # Test source extraction
-    test_sources = [
-        "aHR0cHM6Ly9jYXBzdG9uZWdyb3VwMS5ibG9iLmNvcmUud2luZG93cy5uZXQvZG9jdW1lbnRzL0E3N19BQ09ORjE0LWVuLnBkZg",
-        "FOOTBALL.pdf",
-        "https://example.blob.core.windows.net/documents/Cricket.pdf",
-        "/path/to/document/Basketball.pdf",
-        "https://example.com/docs/Malaria%20Guidelines.pdf", # Added for testing issue 2
-        "Another%20Document.pdf" # Added for testing issue 2
-    ]
+    # test_sources = [
+    #     "aHR0cHM6Ly9jYXBzdG9uZWdyb3VwMS5ibG9iLmNvcmUud2luZG93cy5uZXQvZG9jdW1lbnRzL0E3N19BQ09ORjE0LWVuLnBkZg",
+    #     "FOOTBALL.pdf",
+    #     "https://example.blob.core.windows.net/documents/Cricket.pdf",
+    #     "/path/to/document/Basketball.pdf",
+    #     "https://example.com/docs/Malaria%20Guidelines.pdf", # Added for testing issue 2
+    #     "Another%20Document.pdf" # Added for testing issue 2
+    # ]
    
-    print("\nTesting Source Extraction:")
-    print("-" * 60)
-    for source in test_sources:
-        clean = extract_pdf_name(source)
-        print(f"Input:  {source[:50]}...")
-        print(f"Output: {clean}\n")
+    # print("\nTesting Source Extraction:")
+    # print("-" * 60)
+    # for source in test_sources:
+    #     clean = extract_pdf_name(source)
+    #     print(f"Input:  {source[:50]}...")
+    #     print(f"Output: {clean}\n")
    
     # Test retrieve and format
     print("\nTest Query:")
